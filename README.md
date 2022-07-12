@@ -2,6 +2,68 @@
 
 # gocd-yaml-config-plugin
 
+Forked from the original to add YAML Templating support.
+
+When you install this plugin, there are new settings that allow you to use an external git repo as a template library. These YAML templates must only contain `stages`. Those `stages` are read in and converted to pipelines with a new template parameter `template_from_repo:` in the originating pipeline. You can still use `template:` to use existing templates you have created or uploaded into GoCD as well.
+
+When you add a template git repo, it will checkout the branch you define in a temp folder and refresh/git pull that any time the `configuration repo` files are updated. This ensures you are up-to-date always.
+
+The following items have been added to the plugin settings view to configure the new template repo:
+
+![yaml pattern config](yaml_plugin_settings_new.png)
+
+Here is an example template, calling the new `template_from_repo:` option:
+
+```yaml
+environments:
+  build-com:
+      pipelines:
+          - template_from_repo_cdk_slackbot_build-com
+pipelines:
+  template_from_repo_cdk_slackbot_build-com:
+        group: cloudops-cdks
+        environment_variables:
+          CDK_ENV: prod
+          CDK_LANG: python
+        materials:
+          mygity:
+            git: git@bitbucket.org:openalpr/cloudops-slackbot.git
+            auto_update: false
+            includes:
+                - cdk/**/*.*
+        template_from_repo: testing_cdk_deploy.yaml
+```
+
+And here is the `testing_cdk_deploy.yaml` file that lives inside of the template git repo location:
+
+```yaml
+stages:
+    - cdkDiffStg:
+        clean_workspace: true
+        jobs:
+            cdkDiffJob:
+                artifacts:
+                    - build:
+                        source: cdk.diff.txt
+                        destination: diff/
+                tasks:
+                    - script: |
+                        print("helll world")
+                        mkdir diff
+                        echo "hello world" >diff/cdk.diff.txt
+                tabs:
+                  diff: diff/cdk.diff.txt
+    - cdkDeployStg:
+        clean_workspace: true
+        jobs:
+            cdkDeployJob:
+                tasks:
+                    - script: |
+                        print("hello $CDK_ENV")
+```
+
+
+
 [![Build Status](https://travis-ci.com/tomzo/gocd-yaml-config-plugin.svg?branch=master)](https://travis-ci.com/tomzo/gocd-yaml-config-plugin)
 
 [GoCD](https://www.gocd.org) plugin to keep **pipelines** and **environments**
