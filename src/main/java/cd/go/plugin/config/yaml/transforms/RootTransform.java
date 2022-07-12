@@ -1,5 +1,6 @@
 package cd.go.plugin.config.yaml.transforms;
 
+import cd.go.plugin.config.yaml.GitHelper;
 import cd.go.plugin.config.yaml.JsonConfigCollection;
 import cd.go.plugin.config.yaml.PluginError;
 import cd.go.plugin.config.yaml.YamlConfigException;
@@ -20,6 +21,16 @@ public class RootTransform {
         JobTransform job = new JobTransform(environmentVarsTransform, new TaskTransform());
         StageTransform stage = new StageTransform(environmentVarsTransform, job);
         this.pipelineTransform = new PipelineTransform(material, stage, environmentVarsTransform, parameterTransform);
+        this.environmentsTransform = new EnvironmentsTransform(environmentVarsTransform);
+    }
+
+    public RootTransform(GitHelper gitHelper) {
+        EnvironmentVariablesTransform environmentVarsTransform = new EnvironmentVariablesTransform();
+        MaterialTransform material = new MaterialTransform();
+        ParameterTransform parameterTransform = new ParameterTransform();
+        JobTransform job = new JobTransform(environmentVarsTransform, new TaskTransform());
+        StageTransform stage = new StageTransform(environmentVarsTransform, job);
+        this.pipelineTransform = new PipelineTransform(gitHelper, material, stage, environmentVarsTransform, parameterTransform);
         this.environmentsTransform = new EnvironmentsTransform(environmentVarsTransform);
     }
 

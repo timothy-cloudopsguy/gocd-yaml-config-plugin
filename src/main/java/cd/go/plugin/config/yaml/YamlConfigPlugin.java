@@ -1,6 +1,7 @@
 package cd.go.plugin.config.yaml;
 
 import cd.go.plugin.config.yaml.transforms.RootTransform;
+import cd.go.plugin.config.yaml.GitHelper;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.thoughtworks.go.plugin.api.GoApplicationAccessor;
@@ -20,22 +21,35 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.io.*;
+import java.nio.file.Files;
 import java.util.function.Supplier;
 
 import static cd.go.plugin.config.yaml.PluginSettings.DEFAULT_FILE_PATTERN;
+import static cd.go.plugin.config.yaml.PluginSettings.DEFAULT_TEMPLATE_REPO;
+import static cd.go.plugin.config.yaml.PluginSettings.DEFAULT_TEMPLATE_REPO_BRANCH;
+import static cd.go.plugin.config.yaml.PluginSettings.DEFAULT_TEMPLATE_BASE_PATH;
 import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_FILE_PATTERN;
+import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_TEMPLATE_REPO;
+import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_TEMPLATE_REPO_BRANCH;
+import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_TEMPLATE_BASE_PATH;
 import static com.thoughtworks.go.plugin.api.response.DefaultGoPluginApiResponse.*;
 import static java.lang.String.format;
 
 @Extension
 public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
     private static final String DISPLAY_NAME_FILE_PATTERN = "Go YAML files pattern";
+    private static final String DISPLAY_NAME_TEMPLATE_REPO = "Go YAML template repo";
+    private static final String DISPLAY_NAME_TEMPLATE_REPO_BRANCH = "Go YAML template repo branch";
+    private static final String DISPLAY_NAME_TEMPLATE_BASE_PATH = "Go YAML template base path";
     private static final String PLUGIN_ID = "yaml.config.plugin";
     private static Logger LOGGER = Logger.getLoggerFor(YamlConfigPlugin.class);
 
     private final Gson gson = new Gson();
     private GoApplicationAccessor goApplicationAccessor;
     private PluginSettings settings;
+
+    private GitHelper gitHelper;
 
     @Override
     public void initializeGoApplicationAccessor(GoApplicationAccessor goApplicationAccessor) {
@@ -107,6 +121,27 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
         return DEFAULT_FILE_PATTERN;
     }
 
+    String getTemplateRepo() {
+        if (null != settings && !isBlank(settings.getTemplateRepo())) {
+            return settings.getTemplateRepo();
+        }
+        return DEFAULT_TEMPLATE_REPO;
+    }
+
+    String getTemplateRepoBranch() {
+        if (null != settings && !isBlank(settings.getTemplateRepoBranch())) {
+            return settings.getTemplateRepoBranch();
+        }
+        return DEFAULT_TEMPLATE_REPO_BRANCH;
+    }
+
+    String getTemplateBasePath() {
+        if (null != settings && !isBlank(settings.getTemplateBasePath())) {
+            return settings.getTemplateBasePath();
+        }
+        return DEFAULT_TEMPLATE_BASE_PATH;
+    }
+
     /**
      * fetches plugin settings if we haven't yet
      */
@@ -120,7 +155,7 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
         return handlingErrors(() -> {
             ParsedRequest parsed = ParsedRequest.parse(request);
 
-            YamlConfigParser parser = new YamlConfigParser();
+            YamlConfigParser parser = new YamlConfigParser(gitHelper);
             Map<String, String> contents = parsed.getParam("contents");
             JsonConfigCollection result = new JsonConfigCollection();
             contents.forEach((filename, content) -> {
@@ -154,7 +189,7 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
             File baseDir = new File(parsed.getStringParam("directory"));
             String[] files = scanForConfigFiles(parsed, baseDir);
 
-            YamlConfigParser parser = new YamlConfigParser();
+            YamlConfigParser parser = new YamlConfigParser(gitHelper);
 
             JsonConfigCollection config = parser.parseFiles(baseDir, files);
             config.updateTargetVersionFromFiles();
@@ -176,6 +211,7 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
     }
 
     private String[] scanForConfigFiles(ParsedRequest parsed, File baseDir) {
+        LOGGER.info("scanForConfigFiles()");
         String pattern = parsed.getConfigurationKey(PLUGIN_SETTINGS_FILE_PATTERN);
 
         if (isBlank(pattern)) {
@@ -203,6 +239,9 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
     private GoPluginApiResponse handleGetPluginSettingsConfiguration() {
         Map<String, Object> response = new HashMap<>();
         response.put(PLUGIN_SETTINGS_FILE_PATTERN, createField(DISPLAY_NAME_FILE_PATTERN, DEFAULT_FILE_PATTERN, false, false, "0"));
+        response.put(PLUGIN_SETTINGS_TEMPLATE_REPO, createField(DISPLAY_NAME_TEMPLATE_REPO, DEFAULT_TEMPLATE_REPO, false, false, "1"));
+        response.put(PLUGIN_SETTINGS_TEMPLATE_REPO_BRANCH, createField(DISPLAY_NAME_TEMPLATE_REPO_BRANCH, DEFAULT_TEMPLATE_REPO_BRANCH, false, false, "2"));
+        response.put(PLUGIN_SETTINGS_TEMPLATE_BASE_PATH, createField(DISPLAY_NAME_TEMPLATE_BASE_PATH, DEFAULT_TEMPLATE_BASE_PATH, false, false, "3"));
         return success(gson.toJson(response));
     }
 
@@ -242,7 +281,15 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
     }
 
     private void configurePlugin(PluginSettings settings) {
+        LOGGER.info("Running configurePlugin()");
         this.settings = settings;
+        try {
+            File workingDir = Files.createTempDirectory("templateRepo").toFile();
+            this.gitHelper = new GitHelper(settings.getTemplateRepo(), settings.getTemplateRepoBranch(), settings.getTemplateBasePath(), workingDir);
+        } catch (Exception e) {
+            LOGGER.error("Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
+            throw new RuntimeException(e);
+        }
     }
 
     private GoApiRequest createGoApiRequest(final String api, final String responseBody) {
@@ -259,7 +306,8 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
 
             @Override
             public GoPluginIdentifier pluginIdentifier() {
-                return getGoPluginIdentifier();
+                // return getGoPluginIdentifier();
+                return new GoPluginIdentifier("configrepo", Arrays.asList("1.0", "2.0", "3.0"));
             }
 
             @Override

@@ -1,6 +1,12 @@
 package cd.go.plugin.config.yaml.transforms;
 
+// import cd.go.plugin.config.yaml.transforms.RefSpecHelper;
+// import cd.go.plugin.config.yaml.util.command.CommandLine;
+
 import cd.go.plugin.config.yaml.YamlConfigException;
+import cd.go.plugin.config.yaml.GitHelper;
+import com.thoughtworks.go.plugin.api.logging.Logger;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.internal.LinkedTreeMap;
@@ -15,11 +21,21 @@ import static cd.go.plugin.config.yaml.YamlUtils.*;
 import static cd.go.plugin.config.yaml.transforms.EnvironmentVariablesTransform.JSON_ENV_VAR_FIELD;
 import static cd.go.plugin.config.yaml.transforms.ParameterTransform.YAML_PIPELINE_PARAMETERS_FIELD;
 
+import com.esotericsoftware.yamlbeans.YamlConfig;
+import com.esotericsoftware.yamlbeans.YamlReader;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.util.stream.Stream;
+
+
 public class PipelineTransform {
     private static final String JSON_PIPELINE_NAME_FIELD = "name";
     private static final String JSON_PIPELINE_GROUP_FIELD = "group";
     private static final String JSON_PIPELINE_TEMPLATE_FIELD = "template";
     private static final String JSON_PIPELINE_LABEL_TEMPLATE_FIELD = "label_template";
+    private static final String JSON_PIPELINE_TEMPLATE_FROM_REPO_FIELD = "template_from_repo";
+    private static final String JSON_PIPELINE_LABEL_TEMPLATE_FROM_REPO_FIELD = "label_template_from_repo";
     private static final String JSON_PIPELINE_PIPE_LOCKING_FIELD = "enable_pipeline_locking";
     private static final String JSON_PIPELINE_LOCK_BEHAVIOR_FIELD = "lock_behavior";
     private static final String JSON_PIPELINE_TRACKING_TOOL_FIELD = "tracking_tool";
@@ -31,6 +47,8 @@ public class PipelineTransform {
     private static final String YAML_PIPELINE_GROUP_FIELD = "group";
     private static final String YAML_PIPELINE_TEMPLATE_FIELD = "template";
     private static final String YAML_PIPELINE_LABEL_TEMPLATE_FIELD = "label_template";
+    private static final String YAML_PIPELINE_TEMPLATE_FROM_REPO_FIELD = "template_from_repo";
+    private static final String YAML_PIPELINE_LABEL_TEMPLATE_FROM_REPO_FIELD = "label_template_from_repo";
     private static final String YAML_PIPELINE_PIPE_LOCKING_FIELD = "locking";
     private static final String YAML_PIPELINE_LOCK_BEHAVIOR_FIELD = "lock_behavior";
     private static final String YAML_PIPELINE_TRACKING_TOOL_FIELD = "tracking_tool";
@@ -43,12 +61,41 @@ public class PipelineTransform {
     private final StageTransform stageTransform;
     private final EnvironmentVariablesTransform variablesTransform;
     private ParameterTransform parameterTransform;
+    private GitHelper gitHelper;
+
+    private static Logger LOGGER = Logger.getLoggerFor(PipelineTransform.class);
 
     public PipelineTransform(MaterialTransform materialTransform, StageTransform stageTransform, EnvironmentVariablesTransform variablesTransform, ParameterTransform parameterTransform) {
         this.materialTransform = materialTransform;
         this.stageTransform = stageTransform;
         this.variablesTransform = variablesTransform;
         this.parameterTransform = parameterTransform;
+    }
+
+    public PipelineTransform(GitHelper gitHelper, MaterialTransform materialTransform, StageTransform stageTransform, EnvironmentVariablesTransform variablesTransform, ParameterTransform parameterTransform) {
+        this.materialTransform = materialTransform;
+        this.stageTransform = stageTransform;
+        this.variablesTransform = variablesTransform;
+        this.parameterTransform = parameterTransform;
+
+        this.gitHelper = gitHelper;
+        gitHelper.refreshRepo();
+
+        // this.workingDir = Files.createTempDirectory("yamltemplaterepo").toFile();
+        // this.branch = "master";
+
+        // try {
+            // File workingDir = Files.createTempDirectory("templateRepo").toFile();
+            // gitHelper = new GitHelper(template_repo, workingDir);
+            // final InMemoryStreamConsumer out = inMemoryConsumer();
+            // clone(out, template_repo, this.branch);
+            // git = initializeRepo(template_repo);
+            // cleanAndResetToMaster();
+        // } catch (Exception e) {
+        //     LOGGER.error("Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
+        //     throw new RuntimeException(e);
+
+        // }
     }
 
     public JsonObject transform(Object maybePipe, int formatVersion) {
@@ -80,7 +127,20 @@ public class PipelineTransform {
             pipeline.add(JSON_ENV_VAR_FIELD, jsonEnvVariables);
 
         addMaterials(pipeline, pipeMap, formatVersion);
-        if (!pipeline.has(JSON_PIPELINE_TEMPLATE_FIELD)) {
+        //
+        // If pipeMap contains YAML_PIPELINE_TEMPLATE_FROM_REPO.. grab the stages from the template
+        // file found in the repo
+        if (pipeMap.get(YAML_PIPELINE_TEMPLATE_FROM_REPO_FIELD) != null) {
+            Object templateRepo = pipeMap.get(YAML_PIPELINE_TEMPLATE_FROM_REPO_FIELD);
+            if (!(templateRepo instanceof String))
+                throw new YamlConfigException("expected a string value in template_from_repo");
+            String repo_file = (String) templateRepo;
+            LOGGER.info("transform(): Attempting to load stages using template {} from repo {}", repo_file, gitHelper.getRepoUrl());
+
+            Map<String, Object> templatePipeMap = getTemplateFileFromRepo(gitHelper.getWorkingDirAbsolutPath(), gitHelper.getBasePath(), repo_file);            
+            addStages(pipeline, templatePipeMap);
+        }
+        else if (!pipeline.has(JSON_PIPELINE_TEMPLATE_FIELD)) {
             addStages(pipeline, pipeMap);
         }
 
@@ -90,6 +150,38 @@ public class PipelineTransform {
         }
 
         return pipeline;
+    }
+
+    public Map<String, Object> getTemplateFileFromRepo(String repoDir, String base_path, String file) {
+
+        try {
+
+            if (!base_path.endsWith("/")) {
+                base_path = base_path + "/";
+            }
+
+            if (!file.endsWith("yaml") && !file.endsWith("yml")) {
+                file = file + ".yaml";
+            }
+
+            File f = new File(repoDir + "/" + base_path + file);
+            FileInputStream fis = new FileInputStream(f);
+            InputStreamReader contentReader = new InputStreamReader(fis);
+
+            if (fis.available() < 1) {
+                return null;
+            }
+
+            YamlConfig config = new YamlConfig();
+            config.setAllowDuplicates(false);
+            YamlReader reader = new YamlReader(contentReader, config);
+            Object rootObject = reader.read();
+            return (Map<String, Object>)rootObject;
+        } catch (YamlReader.YamlReaderException e) {
+            throw new YamlConfigException("Yaml Reader exception " + e.getMessage());
+        } catch (IOException e) {
+            throw new YamlConfigException("Yaml Reader exception " + e.getMessage());
+        }
     }
 
     public Map<String, Object> inverseTransform(Object pipeline) {

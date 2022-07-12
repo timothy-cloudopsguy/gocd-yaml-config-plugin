@@ -3,3 +3,18 @@
     <input type="text" ng-model="file_pattern" ng-required="false" placeholder="**/*.gocd.yaml,**/*.gocd.yml" />
     <span class="form_error" ng-show="GOINPUTNAME[file_pattern].$error.server">{{ GOINPUTNAME[file_pattern].$error.server }}</span>
 </div>
+<div class="form_item_block">
+    <label>GoCD YAML template repo:</label>
+    <input type="text" ng-model="template_repo" ng-required="false" placeholder="cloudops-gocd-library.git" />
+    <span class="form_error" ng-show="GOINPUTNAME[template_repo].$error.server">{{ GOINPUTNAME[template_repo].$error.server }}</span>
+</div>
+<div class="form_item_block">
+    <label>GoCD YAML template repo branch:</label>
+    <input type="text" ng-model="template_repo_branch" ng-required="false" placeholder="develop" />
+    <span class="form_error" ng-show="GOINPUTNAME[template_repo_branch].$error.server">{{ GOINPUTNAME[template_repo_branch].$error.server }}</span>
+</div>
+<div class="form_item_block">
+    <label>GoCD YAML template base path:</label>
+    <input type="text" ng-model="template_base_path" ng-required="false" placeholder="templates" />
+    <span class="form_error" ng-show="GOINPUTNAME[template_base_path].$error.server">{{ GOINPUTNAME[template_base_path].$error.server }}</span>
+</div>

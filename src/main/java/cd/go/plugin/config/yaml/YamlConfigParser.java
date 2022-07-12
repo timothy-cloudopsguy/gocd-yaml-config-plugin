@@ -1,5 +1,6 @@
 package cd.go.plugin.config.yaml;
 
+import cd.go.plugin.config.yaml.GitHelper;
 import cd.go.plugin.config.yaml.transforms.RootTransform;
 import com.esotericsoftware.yamlbeans.YamlConfig;
 import com.esotericsoftware.yamlbeans.YamlReader;
@@ -9,8 +10,8 @@ import java.io.*;
 public class YamlConfigParser {
     private RootTransform rootTransform;
 
-    public YamlConfigParser() {
-        this(new RootTransform());
+    public YamlConfigParser(GitHelper gitHelper) {
+        this(new RootTransform(gitHelper));
     }
 
     public YamlConfigParser(RootTransform rootTransform) {

@@ -7,7 +7,7 @@ plugins {
 }
 
 group 'cd.go.plugin.config.yaml'
-version "0.13.2"
+version "0.15.1"
 
 apply plugin: 'java'
 apply plugin: "com.github.jk1.dependency-license-report"
@@ -36,6 +36,19 @@ dependencies {
     compile group: 'com.beust', name: 'jcommander', version: '1.78'
     compile group: 'com.esotericsoftware.yamlbeans', name: 'yamlbeans', version: '1.13'
     compile group: 'org.yaml', name: 'snakeyaml', version: '1.25'
+
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
+
+    // Added for template repos
+    // compile group: 'org.eclipse.jgit', name: 'org.eclipse.jgit', version: '6.2.0.202206071550-r'
+    // implementation group: 'org.eclipse.jgit', name: 'org.eclipse.jgit.ssh.jsch', version: '6.2.0.202206071550-r'
+
+    // compile group: 'com.jcraft', name: 'jsch', version: '0.1.55'
+    // compile group: 'com.github.mwiede', name: 'jsch', version: '0.2.1'
+    // compile group: 'junit', name: 'junit', version: '3.8.2'
+    // compile group: 'org.jetbrains', name: 'annotations', version: '23.0.0'
+    // compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.12.0'
+    // compile group: 'joda-time', name: 'joda-time', version: '2.10.14'
 
     compileOnly group: 'cd.go.plugin', name: 'go-plugin-api', version: project.pluginApiVersion
     testCompile group: 'cd.go.plugin', name: 'go-plugin-api', version: project.pluginApiVersion
@@ -110,6 +123,6 @@ jar {
     exclude "META-INF/*.RSA"
 }
 
-licenseReport {
-    renderers = [new NoticeFileGenerator(new TeeRenderer(new SimpleHtmlReportRenderer()), "${project.buildDir}/reports/dependency-license/")]
-}
+// licenseReport {
+//     renderers = [new NoticeFileGenerator(new TeeRenderer(new SimpleHtmlReportRenderer()), "${project.buildDir}/reports/dependency-license/")]
+// }
