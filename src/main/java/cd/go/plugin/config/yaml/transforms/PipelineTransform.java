@@ -14,6 +14,8 @@ import com.google.gson.internal.LinkedTreeMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static cd.go.plugin.config.yaml.JSONUtils.addOptionalInt;
 import static cd.go.plugin.config.yaml.JSONUtils.addOptionalValue;
@@ -28,6 +30,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.util.stream.Stream;
 
+import org.apache.commons.io.FileUtils;
 
 public class PipelineTransform {
     private static final String JSON_PIPELINE_NAME_FIELD = "name";
@@ -133,12 +136,10 @@ public class PipelineTransform {
         if (pipeMap.get(YAML_PIPELINE_TEMPLATE_FROM_REPO_FIELD) != null) {
             Object templateRepo = pipeMap.get(YAML_PIPELINE_TEMPLATE_FROM_REPO_FIELD);
             if (!(templateRepo instanceof String))
-                throw new YamlConfigException("expected a string value in template_from_repo");
-            String repo_file = (String) templateRepo;
-            LOGGER.info("transform(): Attempting to load stages using template {} from repo {}", repo_file, gitHelper.getRepoUrl());
+                throw new YamlConfigException("transform(): expected a string value in template_from_repo");
+            String repoFile = (String) templateRepo;
 
-            Map<String, Object> templatePipeMap = getTemplateFileFromRepo(gitHelper.getWorkingDirAbsolutPath(), gitHelper.getBasePath(), repo_file);            
-            addStages(pipeline, templatePipeMap);
+            addTemplateStages(pipeline, repoFile);
         }
         else if (!pipeline.has(JSON_PIPELINE_TEMPLATE_FIELD)) {
             addStages(pipeline, pipeMap);
@@ -150,6 +151,65 @@ public class PipelineTransform {
         }
 
         return pipeline;
+    }
+
+    private void addTemplateStages(JsonObject pipeline, String repoFile) {
+        GitHelper gh = gitHelper;
+        File workingDir = new File("temp");
+        boolean cleanupRepo = false;
+
+        // Look for a pattern matching something like the two examples:
+        //    git@bitbucket.org:openalpr/path/to/file.yaml
+        //    git@bitbucket.org:openalpr+develop/path/to/file.yaml
+        // where everything up to the first "/" is the repo and possibly a specific branch
+        // and after it is the location in the repo where the file will exist.
+        // We will default to using master branch if no + exists.
+        Pattern pat1 = Pattern.compile("(.*@.*:.*\\.git.*?)/(.*)");
+        Matcher match1 = pat1.matcher(repoFile);
+        if (match1.find()) {
+            // We found a match, we need to attempt to clone this repo
+            String newRepo = match1.group(1);
+            String newRepoFile = match1.group(2);
+            String newRepoBranch = "master";
+
+            LOGGER.info("addTemplateStages(): Pattern Matched: newRepo {} newRepoFile {}", newRepo, newRepoFile);
+
+            // If we find a branch in the repo string. We'll use that instead of default.
+            if (newRepo.contains("+")) {
+                String[] branchSplit = newRepo.split("\\+");
+                newRepo = branchSplit[0];
+                newRepoBranch = branchSplit[1];
+                LOGGER.info("addTemplateStages(): Found Branch in newRepo: newRepo {} newRepoBranch {}", newRepo, newRepoBranch);
+            }
+
+            try {
+                workingDir = Files.createTempDirectory("templateRepo").toFile();
+                File templateBasePath = new File(newRepoFile);
+                repoFile = templateBasePath.getName();
+                LOGGER.info("addTemplateStages(): Setting repoFile to {}", repoFile);
+                gh = new GitHelper(newRepo, newRepoBranch, templateBasePath.getParent(), workingDir);
+                cleanupRepo = true;
+            } catch (Exception e) {
+                LOGGER.error("addTemplateStages(): Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
+                throw new RuntimeException(e);
+            }
+        }
+
+        LOGGER.info("addTemplateStages(): Attempting to load stages using template {} from repo {}", repoFile, gh.getRepoUrl());
+
+        Map<String, Object> templatePipeMap = getTemplateFileFromRepo(gh.getWorkingDirAbsolutPath(), gh.getBasePath(), repoFile);
+        addStages(pipeline, templatePipeMap);
+
+        if (cleanupRepo) {
+            if (workingDir != null) {
+                try {
+                    LOGGER.info("addTemplateStages(): Deleting temp repo directory {}", workingDir.getAbsolutePath());
+                    FileUtils.deleteDirectory(workingDir);
+                } catch (IOException e) {
+                    LOGGER.error("addTemplateStages(): Could not delete temp workdir \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
+                }
+            }
+        }
     }
 
     public Map<String, Object> getTemplateFileFromRepo(String repoDir, String base_path, String file) {

@@ -6,13 +6,15 @@ Forked from the original to add YAML Templating support.
 
 When you install this plugin, there are new settings that allow you to use an external git repo as a template library. These YAML templates must only contain `stages`. Those `stages` are read in and converted to pipelines with a new template parameter `template_from_repo:` in the originating pipeline. You can still use `template:` to use existing templates you have created or uploaded into GoCD as well.
 
-When you add a template git repo, it will checkout the branch you define in a temp folder and refresh/git pull that any time the `configuration repo` files are updated. This ensures you are up-to-date always.
+When you add a template git repo in the Plugin Settings, it will checkout the branch you define in a temp folder and refresh/git pull that any time the `configuration repo` files are updated. This ensures you are up-to-date always.
+
+You can also override the default Plugin Settings repo with your own, by including the git repo path to your `template_from_repo` string. AND, you can specify the branch in there as well. Examples are below.
 
 The following items have been added to the plugin settings view to configure the new template repo:
 
 ![yaml pattern config](yaml_plugin_settings_new.png)
 
-Here is an example template, calling the new `template_from_repo:` option:
+Here is an example template, calling the new `template_from_repo:` option to read in a file from the default Plugins Settings repo:
 
 ```yaml
 environments:
@@ -62,6 +64,30 @@ stages:
                         print("hello $CDK_ENV")
 ```
 
+Here is second example template, calling the new `template_from_repo:` option to read in a file from a repo overriding any default Plugin Settings repo.
+
+NOTE HERE: `+develop` is the BRANCH to check out. IF you exclude that part of the string, it will pull `master` as the default branch:
+
+
+```yaml
+environments:
+  build-com:
+      pipelines:
+          - template_from_repo_cdk_slackbot_build-com
+pipelines:
+  template_from_repo_cdk_slackbot_build-com:
+        group: cloudops-cdks
+        environment_variables:
+          CDK_ENV: prod
+          CDK_LANG: python
+        materials:
+          mygity:
+            git: git@bitbucket.org:openalpr/cloudops-slackbot.git
+            auto_update: false
+            includes:
+                - cdk/**/*.*
+        template_from_repo: git@bitbucket:openalpr/cloudops-slackbot.git+develop/testing_cdk_deploy.yaml
+```
 
 
 [![Build Status](https://travis-ci.com/tomzo/gocd-yaml-config-plugin.svg?branch=master)](https://travis-ci.com/tomzo/gocd-yaml-config-plugin)
