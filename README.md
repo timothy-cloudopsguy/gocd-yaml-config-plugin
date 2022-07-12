@@ -86,7 +86,7 @@ pipelines:
             auto_update: false
             includes:
                 - cdk/**/*.*
-        template_from_repo: git@bitbucket:openalpr/cloudops-slackbot.git+develop/testing_cdk_deploy.yaml
+        template_from_repo: git@bitbucket.org:openalpr/cloudops-slackbot.git+develop/testing_cdk_deploy.yaml
 ```
 
 
