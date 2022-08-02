@@ -109,7 +109,7 @@ This change modifies 2 elements of the default yaml template as described below:
 
 First, if you use a pipeline as a material to trigger another pipeline, then when calling the `material`, you must include the `environment` in order to generate the unique name of the pipeline to add the depenency for. In the case below, the actual pipeline will be something like `warp_api_service_qa_F4K30F`. This code was added so you never need to worry about what that generated name would look like, and, if you make multiple pipelines in a single template file, you really have no idea what the final pipeline names would be anyways, so this avoids that chicken-egg scenario entirely.
 
- ```
+ ```yaml
 materials:
   warp_api_service_qa:
     pipeline: warp_api_service_qa
@@ -120,7 +120,7 @@ materials:
 
 Second, in the jobs section of the template, if you call a `fetch` from another pipeline, again, you now must include the `environment` of the pipeline, so that the pipeline name can be unqiuely created for you.
 
-```
+```yaml
 stages:
     - iamArtifactStg:
         clean_workspace: true
