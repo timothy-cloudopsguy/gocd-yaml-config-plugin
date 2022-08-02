@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import cd.go.plugin.config.yaml.HashUtils;
+
 import static java.lang.Integer.parseInt;
 
 public class YamlUtils {
@@ -60,12 +62,21 @@ public class YamlUtils {
     private static JsonArray getOptionalStringList(Map<String, Object> map, String fieldName) {
         JsonArray jsonArray = new JsonArray();
         Object value = map.get(fieldName);
+        // String envName = "";
+        // if ("pipelines".equals(fieldName)) {
+        //     envName = map.get("envName").toString();
+        //     map.remove("envName");
+        // }
         if (value != null) {
             List<String> list = (List<String>) value;
             if (list.size() == 0)
                 return null;
             for (String item : list) {
+                // if ("pipelines".equals(fieldName)) {
+                //     jsonArray.add(HashUtils.randomizePipelineName(envName + item));
+                // } else {
                 jsonArray.add(item);
+                // }
             }
             return jsonArray;
         }

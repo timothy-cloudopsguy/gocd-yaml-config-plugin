@@ -23,6 +23,8 @@ import static cd.go.plugin.config.yaml.YamlUtils.*;
 import static cd.go.plugin.config.yaml.transforms.EnvironmentVariablesTransform.JSON_ENV_VAR_FIELD;
 import static cd.go.plugin.config.yaml.transforms.ParameterTransform.YAML_PIPELINE_PARAMETERS_FIELD;
 
+import static cd.go.plugin.config.yaml.GitHelper.WORKING_DIR_BASE;
+
 import com.esotericsoftware.yamlbeans.YamlConfig;
 import com.esotericsoftware.yamlbeans.YamlReader;
 
@@ -110,7 +112,7 @@ public class PipelineTransform {
     }
 
     public JsonObject transform(Map.Entry<String, Object> entry, int formatVersion) {
-        String pipelineName = entry.getKey();
+        String pipelineName = entry.getKey(); // HashUtils.randomizePipelineName(entry.getKey());
         JsonObject pipeline = new JsonObject();
         pipeline.addProperty(JSON_PIPELINE_NAME_FIELD, pipelineName);
         Map<String, Object> pipeMap = (Map<String, Object>) entry.getValue();
@@ -156,13 +158,12 @@ public class PipelineTransform {
     private void addTemplateStages(JsonObject pipeline, String repoFile) {
         GitHelper gh = gitHelper;
         File workingDir = new File("temp");
-        boolean cleanupRepo = false;
 
         // Look for a pattern matching something like the two examples:
         //    git@bitbucket.org:openalpr/path/to/file.yaml
         //    git@bitbucket.org:openalpr+develop/path/to/file.yaml
         // where everything up to the first "/" is the repo and possibly a specific branch
-        // and after it is the location in the repo where the file will exist.
+        // and after it is the location in the repo where the file will exist. 
         // We will default to using master branch if no + exists.
         Pattern pat1 = Pattern.compile("(.*@.*:.*\\.git.*?)/(.*)");
         Matcher match1 = pat1.matcher(repoFile);
@@ -183,33 +184,30 @@ public class PipelineTransform {
             }
 
             try {
-                workingDir = Files.createTempDirectory("templateRepo").toFile();
+                workingDir = new File(WORKING_DIR_BASE + "/" + GitHelper.generateSanitizedRepoName(newRepo) + "." + newRepoBranch);
+                if (!workingDir.exists()) {
+                    workingDir.mkdirs();
+                }
+                // workingDir = Files.createTempDirectory("templateRepo").toFile();
                 File templateBasePath = new File(newRepoFile);
                 repoFile = templateBasePath.getName();
                 LOGGER.info("addTemplateStages(): Setting repoFile to {}", repoFile);
                 gh = new GitHelper(newRepo, newRepoBranch, templateBasePath.getParent(), workingDir);
-                cleanupRepo = true;
+                //cleanupRepo = true;
             } catch (Exception e) {
                 LOGGER.error("addTemplateStages(): Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
                 throw new RuntimeException(e);
             }
         }
+        if (null == gh) {
+            LOGGER.info("addTemplateStages(): gh is null. Returning empty.");
+            return;
+        }
 
         LOGGER.info("addTemplateStages(): Attempting to load stages using template {} from repo {}", repoFile, gh.getRepoUrl());
 
-        Map<String, Object> templatePipeMap = getTemplateFileFromRepo(gh.getWorkingDirAbsolutPath(), gh.getBasePath(), repoFile);
+        Map<String, Object> templatePipeMap = getTemplateFileFromRepo(gh.getWorkingDirAbsolutPath(), gh.getBasePath(), repoFile);            
         addStages(pipeline, templatePipeMap);
-
-        if (cleanupRepo) {
-            if (workingDir != null) {
-                try {
-                    LOGGER.info("addTemplateStages(): Deleting temp repo directory {}", workingDir.getAbsolutePath());
-                    FileUtils.deleteDirectory(workingDir);
-                } catch (IOException e) {
-                    LOGGER.error("addTemplateStages(): Could not delete temp workdir \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
-                }
-            }
-        }
     }
 
     public Map<String, Object> getTemplateFileFromRepo(String repoDir, String base_path, String file) {

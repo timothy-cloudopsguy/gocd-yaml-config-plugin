@@ -4,6 +4,13 @@ import com.google.gson.*;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import cd.go.plugin.config.yaml.HashUtils;
 
 public class JsonConfigCollection {
     private static final int DEFAULT_VERSION = 1;
@@ -14,6 +21,8 @@ public class JsonConfigCollection {
     private JsonArray environments = new JsonArray();
     private JsonArray pipelines = new JsonArray();
     private JsonArray errors = new JsonArray();
+    private Map<String, String> pipelineEnvironmentMap = new HashMap<String, String>();
+
 
     public JsonConfigCollection() {
         gson = new Gson();
@@ -24,11 +33,43 @@ public class JsonConfigCollection {
         mainObject.add("errors", errors);
     }
 
+    public void addToPipelineEnvironmentMap(String pipeline, String environment) {
+        pipelineEnvironmentMap.put(pipeline, environment);
+    }
+    protected Map<String, String> getPipelineEnvironmentMap() {
+        return pipelineEnvironmentMap;
+    }
+    public String getEnvironmentFromMap(String pipeline) {
+        return pipelineEnvironmentMap.get(pipeline);
+    }
+    public List<String> getPipelinesFromMap(String environment) {
+        List<String> l = new ArrayList<String>();
+        for (Map.Entry<String, String> entry : pipelineEnvironmentMap.entrySet()) {
+            if (entry.getValue().equals(environment)) {
+                l.add(entry.getKey());
+            }
+        }
+        return l;
+    }
+
     protected JsonArray getEnvironments() {
         return environments;
     }
 
     public void addEnvironment(JsonElement environment, String location) {
+        // We want to go back through the envJson now to fix up our pipelines to be uniquely named
+        JsonArray t = environment.getAsJsonObject().getAsJsonArray("pipelines");
+        Iterator<JsonElement> it = t.iterator();
+        String envName = environment.getAsJsonObject().getAsJsonPrimitive("name").getAsString();
+
+        JsonArray newA = new JsonArray();
+        while (it.hasNext()) {
+            String pipelineName = it.next().getAsString();
+            newA.add(HashUtils.randomizePipelineName(envName, pipelineName));
+        }
+        environment.getAsJsonObject().remove("pipelines");
+        environment.getAsJsonObject().add("pipelines", newA);
+
         environments.add(environment);
         environment.getAsJsonObject().add("location", new JsonPrimitive(location));
     }
@@ -38,6 +79,11 @@ public class JsonConfigCollection {
     }
 
     public void addPipeline(JsonElement pipeline, String location) {
+        String pipelineName = pipeline.getAsJsonObject().getAsJsonPrimitive("name").getAsString();
+        String envName = getEnvironmentFromMap(pipelineName);
+
+        pipeline.getAsJsonObject().remove("name");
+        pipeline.getAsJsonObject().addProperty("name", HashUtils.randomizePipelineName(envName, pipelineName));
         pipelines.add(pipeline);
         pipeline.getAsJsonObject().add("location", new JsonPrimitive(location));
     }

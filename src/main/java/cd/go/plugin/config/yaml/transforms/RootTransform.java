@@ -9,6 +9,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.internal.LinkedTreeMap;
 
 import java.util.Map;
+import java.util.List;
 
 public class RootTransform {
     private PipelineTransform pipelineTransform;
@@ -55,6 +56,30 @@ public class RootTransform {
             if ("format_version".equalsIgnoreCase(pe.getKey())) {
                 formatVersion = Integer.valueOf((String) pe.getValue());
                 partialConfig.updateFormatVersionFound(formatVersion);
+            } else if ("environments".equalsIgnoreCase(pe.getKey())) {
+                if (pe.getValue() == null)
+                    continue;
+                Map<String, Object> environments = (Map<String, Object>) pe.getValue();
+                for (Map.Entry<String, Object> env : environments.entrySet()) {
+                    String envName = env.getKey();
+                    Object envObj = env.getValue();
+                    if (envObj == null)
+                        continue;
+                    if (!(envObj instanceof Map))
+                        throw new YamlConfigException("Expected environment to be a hash");
+                    Map<String, Object> envMap = (Map<String, Object>) envObj;
+                    Object value = envMap.get("pipelines");
+
+                    if (value != null) {
+                        List<String> list = (List<String>) value;
+                        if (list.size() == 0)
+                            continue;
+                        for (String item : list) {
+                            partialConfig.addToPipelineEnvironmentMap(item, envName);
+                        }
+                    }
+                
+                }
             }
         }
         for (Map.Entry<String, Object> pe : rootMap.entrySet()) {

@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.*;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.function.Supplier;
 
 import static cd.go.plugin.config.yaml.PluginSettings.DEFAULT_FILE_PATTERN;
@@ -35,6 +36,8 @@ import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_TEMPLATE_R
 import static cd.go.plugin.config.yaml.PluginSettings.PLUGIN_SETTINGS_TEMPLATE_BASE_PATH;
 import static com.thoughtworks.go.plugin.api.response.DefaultGoPluginApiResponse.*;
 import static java.lang.String.format;
+
+import static cd.go.plugin.config.yaml.GitHelper.WORKING_DIR_BASE;
 
 @Extension
 public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
@@ -54,6 +57,24 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
     @Override
     public void initializeGoApplicationAccessor(GoApplicationAccessor goApplicationAccessor) {
         this.goApplicationAccessor = goApplicationAccessor;
+        ensureConfigured();
+
+        // Map<String, String> env = System.getenv();
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // env.forEach((k, v) -> LOGGER.info(k + ":" + v));
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // LOGGER.info("********************************************");
+        // this.workingDir = (env.get(WRAPPER_WORKING_DIR) != null) ? env.get(WRAPPER_WORKING_DIR)+workingDirExtension : "/tmp"+workingDirExtension;
+        // this.workingDir = WORKING_DIR_BASE;
     }
 
     @Override
@@ -149,6 +170,20 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
         if (null == settings) {
             settings = fetchPluginSettings();
         }
+
+        LOGGER.info("Running ensureConfigured()");
+        // this.settings = settings;
+        try {
+            File workDir = new File(WORKING_DIR_BASE + "/" + GitHelper.generateSanitizedRepoName(settings.getTemplateRepo()) + "." + settings.getTemplateRepoBranch());
+            if (!workDir.exists()) {
+                workDir.mkdirs();
+            }
+            this.gitHelper = new GitHelper(settings.getTemplateRepo(), settings.getTemplateRepoBranch(), settings.getTemplateBasePath(), workDir);
+        } catch (Exception e) {
+            LOGGER.error("Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
+            throw new RuntimeException(e);
+        }
+
     }
 
     private GoPluginApiResponse handleParseContentRequest(GoPluginApiRequest request) {
@@ -284,8 +319,11 @@ public class YamlConfigPlugin implements GoPlugin, ConfigRepoMessages {
         LOGGER.info("Running configurePlugin()");
         this.settings = settings;
         try {
-            File workingDir = Files.createTempDirectory("templateRepo").toFile();
-            this.gitHelper = new GitHelper(settings.getTemplateRepo(), settings.getTemplateRepoBranch(), settings.getTemplateBasePath(), workingDir);
+            File workDir = new File(WORKING_DIR_BASE + "/" + GitHelper.generateSanitizedRepoName(settings.getTemplateRepo()) + "." + settings.getTemplateRepoBranch());
+            if (!workDir.exists()) {
+                workDir.mkdirs();
+            }
+            this.gitHelper = new GitHelper(settings.getTemplateRepo(), settings.getTemplateRepoBranch(), settings.getTemplateBasePath(), workDir);
         } catch (Exception e) {
             LOGGER.error("Error while trying to initialize template repo \n Message: {} \n StackTrace: {}", e.getMessage(), e.getStackTrace(), e);
             throw new RuntimeException(e);

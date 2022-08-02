@@ -13,6 +13,9 @@ import static cd.go.plugin.config.yaml.YamlUtils.*;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
 
+import cd.go.plugin.config.yaml.HashUtils;
+
+
 public class MaterialTransform extends ConfigurationTransform {
 
     public static final String JSON_MATERIAL_TYPE_FIELD = "type";
@@ -177,8 +180,22 @@ public class MaterialTransform extends ConfigurationTransform {
             material.addProperty("url", hg);
         }
         String dependency = getOptionalString(materialMap, YAML_SHORT_KEYWORD_DEPENDENCY);
+        String environment = null;
         if (dependency != null) {
             material.addProperty(JSON_MATERIAL_TYPE_FIELD, "dependency");
+
+            // We're going to look for environment in case this is a pipeline dependency
+            for (Map.Entry<String, Object> materialProp : materialMap.entrySet()) {
+                if (yamlSpecialKeywords.contains(materialProp.getKey()))
+                    continue;
+                if (materialProp.getValue() instanceof String) {
+                    if ("environment".equals(materialProp.getKey())) {
+                        environment = (String) materialProp.getValue();
+                    }
+                }
+            }
+            if (environment == null)
+                throw new RuntimeException("Expected pipeline dependency to contain environment of dependency pipeline.");
         }
         String scm_id = getOptionalString(materialMap, YAML_SHORT_KEYWORD_SCM_ID);
         if (scm_id != null || materialMap.containsKey(YAML_MATERIAL_SCM_PLUGIN_CONFIG_FIELD)) {
@@ -203,8 +220,15 @@ public class MaterialTransform extends ConfigurationTransform {
         for (Map.Entry<String, Object> materialProp : materialMap.entrySet()) {
             if (yamlSpecialKeywords.contains(materialProp.getKey()))
                 continue;
-            if (materialProp.getValue() instanceof String)
-                material.addProperty(materialProp.getKey(), (String) materialProp.getValue());
+            if (materialProp.getValue() instanceof String) {
+                if ("pipeline".equals(materialProp.getKey())) {
+                    material.addProperty(materialProp.getKey(), HashUtils.randomizePipelineName(environment, (String) materialProp.getValue()));
+                } else if ("environment".equals(materialProp.getKey())) {
+                    continue;
+                } else {
+                    material.addProperty(materialProp.getKey(), (String) materialProp.getValue());
+                }
+            }
         }
         return material;
     }

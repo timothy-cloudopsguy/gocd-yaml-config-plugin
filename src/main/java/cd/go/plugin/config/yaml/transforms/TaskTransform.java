@@ -12,6 +12,8 @@ import static cd.go.plugin.config.yaml.JSONUtils.addOptionalList;
 import static cd.go.plugin.config.yaml.JSONUtils.addOptionalValue;
 import static cd.go.plugin.config.yaml.YamlUtils.*;
 
+import cd.go.plugin.config.yaml.HashUtils;
+
 public class TaskTransform extends ConfigurationTransform {
     public static final String YAML_TASK_CANCEL_FIELD = "on_cancel";
     public static final String JSON_TASK_CANCEL_FIELD = "on_cancel";
@@ -76,6 +78,30 @@ public class TaskTransform extends ConfigurationTransform {
         addOnCancel(taskJson, taskMap);
 
         if ("fetch".equals(taskType)) {
+            // Here we need to grab each entry in taskMap, set envName and then if we find 
+            // pipeline then we can make our uniqueness pipeline name
+
+            String envName = null;
+            String pipelineName = null;
+            // We're going to look for environment in case this is a pipeline dependency
+            for (Map.Entry<String, Object> taskProp : taskMap.entrySet()) {
+                if (taskProp.getValue() instanceof String) {
+                    if ("environment".equals(taskProp.getKey())) {
+                        envName = (String) taskProp.getValue();
+                    }
+                    if ("pipeline".equals(taskProp.getKey())) {
+                        pipelineName = (String) taskProp.getValue();
+                    }
+                }
+            }
+            if (envName == null && pipelineName != null) {
+                throw new RuntimeException("Expected fetch task to contain environment of dependency pipeline.");
+            } else if (envName != null && pipelineName != null) {
+                taskMap.remove("environment");
+                taskMap.remove("pipeline");
+                taskMap.put("pipeline",  HashUtils.randomizePipelineName(envName, pipelineName));
+            }
+
             addOptionalObject(taskJson, taskMap, JSON_PLUGIN_CONFIGURATION_FIELD, YAML_PLUGIN_CONFIGURATION_FIELD);
             super.addConfiguration(taskJson, (Map<String, Object>) taskMap.get(JSON_PLUGIN_CONFIGURATION_FIELD));
         } else {

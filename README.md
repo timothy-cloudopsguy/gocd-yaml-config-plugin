@@ -4,6 +4,15 @@
 
 Forked from the original to add YAML Templating support.
 
+
+There are 2 MAIN changes to know about.
+
+1. Addition of YAML templating support.
+2. Modified pipeline NAMES to be Environment Unique instead of the default Global Unique.
+
+
+Change 1: Addition of YAML templating support.
+
 When you install this plugin, there are new settings that allow you to use an external git repo as a template library. These YAML templates must only contain `stages`. Those `stages` are read in and converted to pipelines with a new template parameter `template_from_repo:` in the originating pipeline. You can still use `template:` to use existing templates you have created or uploaded into GoCD as well.
 
 When you add a template git repo in the Plugin Settings, it will checkout the branch you define in a temp folder and refresh/git pull that any time the `configuration repo` files are updated. This ensures you are up-to-date always.
@@ -87,6 +96,46 @@ pipelines:
             includes:
                 - cdk/**/*.*
         template_from_repo: git@bitbucket.org:openalpr/cloudops-slackbot.git+develop/testing_cdk_deploy.yaml
+```
+
+
+Change 2: Modified pipeline NAMES to be Environment Unique instead of the default Global Unique.
+
+This change will concatenate the `environment` name and the `pipeline name`, generate a SHA512 hash and use that hash to generate a unique 6 character string to append to the pipeline name. 
+
+This makes the templates `environmentally unique` instead of `globally unique`. 
+
+This change modifies 2 elements of the default yaml template as described below:
+
+First, if you use a pipeline as a material to trigger another pipeline, then when calling the `material`, you must include the `environment` in order to generate the unique name of the pipeline to add the depenency for. In the case below, the actual pipeline will be something like `warp_api_service_qa_F4K30F`. This code was added so you never need to worry about what that generated name would look like, and, if you make multiple pipelines in a single template file, you really have no idea what the final pipeline names would be anyways, so this avoids that chicken-egg scenario entirely.
+
+ ```
+materials:
+  warp_api_service_qa:
+    pipeline: warp_api_service_qa
+    environment: warp-dev-com
+    stage: promoteStg
+    ignore_for_scheduling: false
+```
+
+Second, in the jobs section of the template, if you call a `fetch` from another pipeline, again, you now must include the `environment` of the pipeline, so that the pipeline name can be unqiuely created for you.
+
+```
+stages:
+    - iamArtifactStg:
+        clean_workspace: true
+        jobs:
+            iamArtifactJob:
+                elastic_profile_id: default
+                tasks:
+                    - fetch:
+                        pipeline: cdk_cfn_custom_iam_sync
+                        environment: autonotice-dev-com
+                        stage: iamArtifactStg
+                        job: iamArtifactJob
+                        source: build/
+                        destination: tmp/
+                    - script: cfn_custom_iam_sync
 ```
 
 

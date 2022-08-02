@@ -7,11 +7,12 @@ import java.io.*;
 public class GitHelper {
 
     private static Logger LOGGER = Logger.getLoggerFor(GitHelper.class);
-
     private final String repoUrl;
     private final String branch;
     private final String basePath;
     private final File workingDir;
+
+    public static final String WORKING_DIR_BASE = "/godata/gocd_yaml_config_plugin_template_repos";
 
     public GitHelper(String repoUrl, String branch, String basePath, File workingDir) {
         this.repoUrl = repoUrl;
@@ -41,11 +42,21 @@ public class GitHelper {
         return workingDir;
     }
 
+    public static String generateSanitizedRepoName(String repo) {
+        return repo.substring(repo.lastIndexOf(":") + 1).replace("/", "_");
+    }
+
     void initializeRepo()  {
-        LOGGER.info("initializeRepo(): Cloning {} into {}", repoUrl, workingDir.getAbsolutePath());
-        runCommand("git clone " + repoUrl + " " + workingDir.getAbsolutePath());
-        LOGGER.info("initializeRepo(): Checking out branch {} into {}", branch, workingDir.getAbsolutePath());
-        runCommand("git checkout " + branch, workingDir);
+        File gitfile = new File(workingDir.getAbsolutePath() + "/" + ".git");
+        if (! gitfile.exists()) {
+            LOGGER.info("initializeRepo(): Cloning {} into {}", repoUrl, workingDir.getAbsolutePath());
+            runCommand("git clone " + repoUrl + " " + workingDir.getAbsolutePath());
+            LOGGER.info("initializeRepo(): Checking out branch {} into {}", branch, workingDir.getAbsolutePath());
+            runCommand("git checkout " + branch, workingDir);
+        } else {
+            LOGGER.info("initializeRepo(): Repo {} exists locally, calling refreshRepo() instead.", repoUrl);
+            refreshRepo();
+        }
     }
 
     public void refreshRepo() {
